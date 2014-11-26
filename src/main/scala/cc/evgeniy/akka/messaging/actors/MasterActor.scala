@@ -7,10 +7,10 @@ import scala.concurrent.ExecutionContextExecutor
 
 class MasterActor extends Actor with ActorLogging {
 
-  implicit def executionContext: ExecutionContextExecutor = context.dispatcher
+  implicit def executionContext: ExecutionContextExecutor = context.system.dispatchers.lookup("my-fork-join-dispatcher")
 
   // router which defined in config
-  val router = context.actorOf(FromConfig.props(Props.empty), name = "masterNodesRouter")
+  val router = context.actorOf(FromConfig.props(Props.empty).withDispatcher("my-fork-join-dispatcher"), name = "masterNodesRouter")
 
   def receive = {
     case SetSendTimeout(ms: Int) => {
