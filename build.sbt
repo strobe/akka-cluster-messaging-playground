@@ -9,7 +9,7 @@ version := "1.0"
 
 scalaVersion := "2.11.4"
 
-//mainClass in Compile := Some("cc.evgeniy.akka.messaging.TestingApp")
+mainClass in Compile := Some("cc.evgeniy.akka.messaging.ClusterMessagingApp")
 
 resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/"
 
@@ -34,7 +34,7 @@ libraryDependencies ++= Seq(
 //  "io.spray"           %%  "spray-testkit"                 % sprayVersion % "test",
 //  "io.spray"           %%  "spray-json"                    % "1.3.1",
   "org.scalatest"      %%  "scalatest"                     % "2.2.0" withSources() withJavadoc(),
-  "org.specs2"         %%  "specs2"                        % "2.4.2" % "test",
+  "org.specs2"         %%  "specs2"                        % "2.4.2" % "test"
   //"org.scala-lang.modules" %% "scala-async" % "0.9.2" withSources() withJavadoc()
 )
 
@@ -64,8 +64,8 @@ javacOptions ++= Seq(
   "-Xlint:unchecked",
   "-Xlint:deprecation")
 
-resourceDirectory in Compile <<=
-  baseDirectory{ _ / "./sigar" }
+//resourceDirectory in Compile <<=
+//  baseDirectory{ _ / "./sigar" }
 
 // ======== assembly settings ========
 mainClass in assembly := Some("cc.evgeniy.akka.messaging.ClusterMessagingApp")
