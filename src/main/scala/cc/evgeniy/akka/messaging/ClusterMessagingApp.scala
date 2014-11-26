@@ -10,9 +10,23 @@ object ClusterMessagingApp {
 
   def main(args: Array[String]): Unit = {
     if (args.isEmpty)
-      startup(Seq("2551", "2552", "0"))
+      startup(Seq("2551", "2552", "0", "0", "0"))
     else
       startup(args)
+
+    /*
+    def commandLoop(): Unit = {
+      scala.io.StdIn.readLine(">> ") match {
+        case "help"          => println("'quit' - exit")
+        case "quit"          => return
+        case _               => // ignore
+      }
+
+      commandLoop()
+    }
+
+    commandLoop()
+    */
   }
 
 
