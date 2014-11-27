@@ -6,6 +6,8 @@ run following in terminal:
 
             'sbt run'
 
+see log in ./log/akka.log
+
 ## Example of command line session
             node Actor[akka://ClusterSystem/user/worker#-72748346] has been added
             node Actor[akka://ClusterSystem/user/worker#2019401759] has been added
