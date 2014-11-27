@@ -262,7 +262,7 @@ object ClusterMessagingApp {
 
 
   // TODO: some code here should launch new cloud VM instances and JVMs with our cluster worker app
-  // This launched new ActorSystem as node which is really expansive, on
+  // This launched new ActorSystem as node which is really expensive, on
   // threads usage especially. Therefore as usual if about 100 nodes will be stared
   // (it will be about 1000 threads) is possible that we gonna catch many errors
   // related to threads, many files, sockets etc.
