@@ -55,17 +55,17 @@ object ClusterMessagingApp {
     val helpString ="""For messages stats see: log/akka.log
       #
       #Commands:
-      #  help                  - this help text
-      #  quit                  - exit from app
-      #  nodes_count           - return cont of cluster nodes
-      #  nodes_list            - show list of cluster nodes addresses
-      #  set_timeout [ms]      - set messages sending timeout in milliseconds
-      #  add_node              - adds single node
-      #  add_nodes [count]     - adds multiply nodes
-      #  remove_node           - remove single node
-      #  remove_nodes [count]  - remove multiply nodes
+      #  help                              - this help text
+      #  quit                              - exit from app
+      #  nodes_count                       - return cont of cluster nodes
+      #  nodes_list                        - show list of cluster nodes addresses
+      #  set_timeout [ms]                  - set messages sending timeout in milliseconds
+      #  add_node                          - adds single node
+      #  add_nodes [count]                 - adds multiply nodes
+      #  remove_node                       - remove single node
+      #  remove_nodes [count]              - remove multiply nodes
       #  get_stats [countOfNewNodesInStep] - returned analytics information and created specific count of nodes during it
-      #  get_stats             - returned analytics information """.stripMargin('#')
+      #  get_stats                         - returned analytics information """.stripMargin('#')
 
     val timeoutPattern    = "(set_timeout \\d+)".r   // '\\d' - digits, '+' 1 or more
     val addNodePattern    = "(add_nodes \\d+)".r     // '\\d' - digits, '+' 1 or more
@@ -206,17 +206,15 @@ object ClusterMessagingApp {
     })
 
     // ugly pretty print TODO:
-    println(s""" Roughly test stats:
-            ||nodes count | messages in cluster/sec | messages per node/sec | sending timeout (ms) |
-            |
-            ${ (for {
-      i <- statItems
-    } yield s"|| ${i.nodes}      |" +
-        s" ${i.clusterMessages}           |" +
-        s" ${i.nodeMessages}              |" +
-        s" ${i.timeout}                   |\n").mkString}
-            |
-            """.stripMargin)
+    println(s"""Roughly Tests Stats:
+      |---------------------------------------------------------------------------------------
+      ||nodes count | messages in cluster/sec | messages per node/sec | sending timeout (ms) |
+      |---------------------------------------------------------------------------------------
+      ${(for {i <- statItems} yield f"|| ${i.nodes}%-8d   |" +
+                                    f" ${i.clusterMessages}%-8d                |" +
+                                    f" ${i.nodeMessages}%-8d              |" +
+                                    f" ${i.timeout}%-8d             |\n").mkString}
+    """.stripMargin)
   }
 
 
