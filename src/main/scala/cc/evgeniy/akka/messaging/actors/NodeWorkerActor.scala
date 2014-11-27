@@ -1,55 +1,54 @@
 package cc.evgeniy.akka.messaging.actors
 
 import java.util.concurrent.TimeUnit
-
 import akka.actor.{ Actor, ActorLogging, Props}
 import akka.routing.FromConfig
-import cc.evgeniy.akka.messaging.utils.SystemAddressExtension
-
+import scala.collection.mutable
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration.Duration
+import cc.evgeniy.akka.messaging.utils.SystemAddressExtension
 
 
 class NodeWorkerActor extends Actor with ActorLogging {
 
-  implicit def executionContext: ExecutionContextExecutor = context.system.dispatchers.lookup("my-fork-join-dispatcher")
+  val system = context.system
+
+  implicit def executionContext: ExecutionContextExecutor =
+    context.system.dispatchers.lookup("my-fork-join-dispatcher")
 
   var startedTime = System.currentTimeMillis()
-  var count = 0
 
   // router which defined in config
-  val router = context.actorOf(FromConfig.props(Props.empty).withDispatcher("my-fork-join-dispatcher"), name = "nodesRouter")
+  val router = context.actorOf(FromConfig.props(Props.empty)
+    .withDispatcher("my-fork-join-dispatcher"), name= "nodesRouter")
 
-  var schedule = context.system.scheduler.schedule(Duration.Zero,
-                                                   interval=Duration(5, TimeUnit.MILLISECONDS)) {
-    sendCommonMessage()
-  }
+  var schedule =
+    system.scheduler.schedule(Duration.Zero,
+                              interval= Duration(30, TimeUnit.MILLISECONDS)) {
+      sendCommonMessage()
+    }
 
-
-  override def preStart(): Unit = {
-    //log.info(s"router started ${router.path}")
-  }
+  var countQueue = mutable.Queue[Long]()
 
 
   def receive = {
-
-    case CommonMessage => doLogStats()
-
     case SetSendTimeout(ms: Int) => {
-     log.info(s"timeout changed $ms")
       changeSendTimeout(ms)
+      log.info(s"timeout changed $ms")
     }
 
-    case _ => // ignore
+    case CommonMessage => doMessagesLogStats()
+    case _             => // ignore
   }
 
 
   def changeSendTimeout(ms: Int) = {
     schedule.cancel()
-    schedule = context.system.scheduler.schedule(Duration.Zero,
-                                                 interval=Duration(ms, TimeUnit.MILLISECONDS)) {
-      sendCommonMessage()
-    }
+    schedule =
+      system.scheduler.schedule(Duration.Zero,
+                                interval= Duration(ms, TimeUnit.MILLISECONDS)) {
+        sendCommonMessage()
+      }
   }
 
 
@@ -57,14 +56,20 @@ class NodeWorkerActor extends Actor with ActorLogging {
     router ! CommonMessage
   }
 
-  def doLogStats() = {
-    count += 1
+  def doMessagesLogStats() = {
     val now = System.currentTimeMillis()
-    val seconds = (now - startedTime)/1000
-    if (seconds >= 1) {
-      startedTime = System.currentTimeMillis()
-      count = 0
-    }
-    log.info(s"${SystemAddressExtension(context.system).address.toString}  $count Messages processed in 1 second")
+    val lastSec = now - 1000
+
+    // removing all elements which is lived more that second
+    countQueue.dequeueAll(_ <= lastSec)
+
+    // add current timestamp
+    countQueue += now
+
+    // count of messages for last second
+    val count = countQueue.length
+
+    log.info(s"${SystemAddressExtension(context.system).address.toString} " +
+      s" $count Messages processed in 1 second")
   }
 }

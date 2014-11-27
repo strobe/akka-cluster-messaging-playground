@@ -1,12 +1,11 @@
 package cc.evgeniy.akka.messaging
 
 import akka.actor._
+import akka.routing.FromConfig
 import com.typesafe.config.ConfigFactory
-
+import scala.concurrent.ExecutionContextExecutor
 import cc.evgeniy.akka.messaging.actors._
 import cc.evgeniy.akka.messaging.utils.SystemAddressExtension
-
-import scala.concurrent.ExecutionContextExecutor
 
 
 object ClusterMessagingApp {
@@ -15,51 +14,70 @@ object ClusterMessagingApp {
 
   // Override the configuration of the port
   val config = ConfigFactory.parseString("akka.remote.netty.tcp.port=" + 2551)
-    .withFallback(ConfigFactory.parseString("akka.cluster.roles = [master]"))
+    .withFallback(ConfigFactory.parseString("akka.cluster.roles= [master]"))
     .withFallback(defaultConfig)
 
   // Create an Akka system
   val system = ActorSystem("ClusterSystem", config)
 
-  implicit def executionContext: ExecutionContextExecutor = system.dispatchers.lookup("my-fork-join-dispatcher")
+  // shared dispatcher for less intensive treads usage
+  // (on production cluster should be individual dispatchers per node)
+  implicit def executionContext: ExecutionContextExecutor =
+    system.dispatchers.lookup("my-fork-join-dispatcher")
 
-  // master actor
-  val master = system.actorOf(Props[MasterActor], name = "master")
+  // router which defined in config
+  val router = system.actorOf(FromConfig.props(Props.empty)
+    .withDispatcher("my-fork-join-dispatcher"), name= "masterNodesRouter")
+
+  // Create an actor that handles cluster domain events
+  system.actorOf(Props[SimpleClusterListener], name= "clusterListener")
 
   var workerSystems = Vector.empty[ActorSystem]
 
-  // Create an actor that handles cluster domain events
-  system.actorOf(Props[SimpleClusterListener], name = "clusterListener")
-
 
   def main(args: Array[String]): Unit = {
-    if (args.isEmpty)
-      startup(Seq("2552", "0", "0", "0"))
-    else
-      startup(args)
+    // starting default nodes
+    if (args.isEmpty) startup(Seq("2552", "0", "0", "0"))
+    else              startup(args)
 
-    val TimeoutPattern = "(set_timeout \\d+)".r  // '\\d' - digits, '+' 1 or more
-    val AddNodePattern = "(add_node \\d+)".r  // '\\d' - digits, '+' 1 or more
+    val helpString ="""For messages stats see: log/akka.log
+      #
+      #Commands:
+      #  help                  - this help text
+      #  quit                  - exit from app
+      #  nodes_count           - return cont of cluster nodes
+      #  nodes_list            - show list of cluster nodes addresses
+      #  set_timeout [ms]      - set messages sending timeout in milliseconds
+      #  add_node              - adds single node
+      #  add_node [count]      - adds multiply nodes
+      #  remove_node           - remove single node
+      #  remove_node [count]   - remove multiply nodes """.stripMargin('#')
 
+    val timeoutPattern    = "(set_timeout \\d+)".r  // '\\d' - digits, '+' 1 or more
+    val addNodePattern    = "(add_node \\d+)".r     // '\\d' - digits, '+' 1 or more
+    val removeNodePattern = "(remove_node \\d+)".r  // '\\d' - digits, '+' 1 or more
+
+    println(helpString)
+
+    // infinity recursive loop for command line user interactions
     def commandLoop(): Unit = {
       scala.io.StdIn.readLine(">> ") match {
-
-        case "help" => println("'quit' - exit")
-
-        case TimeoutPattern(s) => {
+        // set_timeout $milliseconds
+        case timeoutPattern(s) => {
           val timeout = "(\\d+)".r findFirstIn s // getting digits from string
 
           timeout match {
             case Some(t) if t.toInt > 0 => {
               // send
-              master ! SetSendTimeout(t.toInt)
+              router ! SetSendTimeout(t.toInt)
               println(s"SetTimeout message sent with: $t ms")
             }
             case _ => println("incorrect input")
           }
         }
 
-        case AddNodePattern(s) => {
+        // add_node $count
+        case addNodePattern(s)   => {
           val count = "(\\d+)".r findFirstIn s // getting digits from string
           count match  {
             case Some(n) if n.toInt > 0 => {
@@ -69,17 +87,31 @@ object ClusterMessagingApp {
           }
         }
 
-        case "add_node" => addNode(1, "0", executionContext)
+        // remove_node $count
+        case removeNodePattern(s) => {
+          val count = "(\\d+)".r findFirstIn s // getting digits from string
 
-        case "remove_node" => removeNode()
+          count match  {
+            case Some(n) if n.toInt > 0 => {
+              removeNode(n.toInt)
+            }
+            case _ =>  println("incorrect input")
+          }
+        }
 
-        case "list_nodes" => listNodes()
+        case "add_node"    => addNode(1, "0", executionContext)
 
-        case "get_stats" => ???
+        case "remove_node" => removeNode(1)
 
-        case "quit"          => return
+        case "nodes_list"  => nodesList()
 
-        case _               => // ignore
+        case "nodes_count" => nodesCount()
+
+        case "quit"        => return
+
+        case "help"        => println(helpString)
+
+        case _             => // ignore
       }
       commandLoop()
     }
@@ -87,48 +119,66 @@ object ClusterMessagingApp {
 
     // finish all
     shutdown()
-
-
   }
 
 
-  def removeNode() = {
-    val candidate = workerSystems.last
-    workerSystems = workerSystems filterNot candidate.==
-    candidate.shutdown()
-    // TODO: it should wait for cluster MemberRemoved message before say that is removed
-    println("node removed")
+  // TODO: it should wait for cluster MemberRemoved message before say that is removed
+  def removeNode(count: Int) = {
+    if (count < workerSystems.length - 1) {
+      for (x <- 1 to count) {
+        // removing last node
+        val candidate = workerSystems.last
+        workerSystems = workerSystems filterNot candidate.==
+        candidate.shutdown()
+
+        println("node removed")
+      }
+    }
+    else { println("cluster doesn't has enough nodes for this command") }
   }
 
 
-  def listNodes() = {
-    s""" Nodes:\n ${
-      for { n <- workerSystems } yield println(SystemAddressExtension(n).address.toString)
-    }"""
+  def nodesList() = {
+    var nodesString = "Nodes:\\n"
+    for(n <- workerSystems) {
+      nodesString += SystemAddressExtension(n).address.toString + "\n"
+    }
+
+    println(nodesString)
   }
 
 
-  /**
-   * TOOD: some code here should launch new cloud VM instances and JVMs with our cluster worker app
-   */
+  def nodesCount() = {
+    println(s"Nodes count: ${workerSystems.length}")
+  }
+
+
+  // TODO: some code here should launch new cloud VM instances and JVMs with our cluster worker app
+  // This launched new ActorSystem as node which is really expansive, on
+  // threads usage especially. Therefore as usual if about 100 nodes will be stared
+  // (it will be about 1000 threads) is possible that we gonna catch many errors
+  // related to threads, many files, sockets etc.
   def addNode(count: Int, port: String,  executionContext: ExecutionContextExecutor) = {
     for(x <- 1 to count ) {
       // Override the configuration of the port
       val config = ConfigFactory.parseString("akka.remote.netty.tcp.port=" + port)
-        .withFallback(ConfigFactory.parseString("akka.cluster.roles = [node]"))
+        .withFallback(ConfigFactory.parseString("akka.cluster.roles= [node]"))
         .withFallback(defaultConfig)
 
       // Create an Akka system
-//      val system = ActorSystem("ClusterSystem", config)
-      val system = ActorSystem("ClusterSystem", config = Some(config), defaultExecutionContext=Some(executionContext))
+      val system = ActorSystem("ClusterSystem",
+                               config= Some(config),
+                               defaultExecutionContext= Some(executionContext)) // we use shared dispatcher here
 
       // node worker actor
-      val worker = system.actorOf(Props[NodeWorkerActor], name = s"worker")
+      val worker = system.actorOf(Props[NodeWorkerActor], name= "worker")
 
-     workerSystems = workerSystems :+ system
+      // saving node system reference
+      workerSystems = workerSystems :+ system
 
       // TODO: it should wait for cluster MemberUP message before say that is added
       println(s"node $worker has been added")
+
     }
   }
 
@@ -138,6 +188,7 @@ object ClusterMessagingApp {
       addNode(1, port, executionContext)
     }
   }
+
 
   def shutdown() = {
     for { n <- workerSystems } yield n.shutdown()
