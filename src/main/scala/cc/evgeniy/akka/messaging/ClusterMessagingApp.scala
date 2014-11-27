@@ -3,7 +3,8 @@ package cc.evgeniy.akka.messaging
 import akka.actor._
 import akka.routing.FromConfig
 import com.typesafe.config.ConfigFactory
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Future, Await, ExecutionContextExecutor}
 import cc.evgeniy.akka.messaging.actors._
 import cc.evgeniy.akka.messaging.utils.SystemAddressExtension
 
@@ -13,8 +14,8 @@ object ClusterMessagingApp {
   val defaultConfig = ConfigFactory.load()
 
   // Override the configuration of the port
-  val config = ConfigFactory.parseString("akka.remote.netty.tcp.port=" + 2551)
-    .withFallback(ConfigFactory.parseString("akka.cluster.roles= [master]"))
+  val config = ConfigFactory.parseString("akka.remote.netty.tcp.port =" + 2551)
+    .withFallback(ConfigFactory.parseString("akka.cluster.roles = [master]"))
     .withFallback(defaultConfig)
 
   // Create an Akka system
@@ -49,13 +50,13 @@ object ClusterMessagingApp {
       #  nodes_list            - show list of cluster nodes addresses
       #  set_timeout [ms]      - set messages sending timeout in milliseconds
       #  add_node              - adds single node
-      #  add_node [count]      - adds multiply nodes
+      #  add_nodes [count]      - adds multiply nodes
       #  remove_node           - remove single node
-      #  remove_node [count]   - remove multiply nodes """.stripMargin('#')
+      #  remove_nodes [count]   - remove multiply nodes """.stripMargin('#')
 
     val timeoutPattern    = "(set_timeout \\d+)".r  // '\\d' - digits, '+' 1 or more
-    val addNodePattern    = "(add_node \\d+)".r     // '\\d' - digits, '+' 1 or more
-    val removeNodePattern = "(remove_node \\d+)".r  // '\\d' - digits, '+' 1 or more
+    val addNodePattern    = "(add_nodes \\d+)".r     // '\\d' - digits, '+' 1 or more
+    val removeNodePattern = "(remove_nodes \\d+)".r  // '\\d' - digits, '+' 1 or more
 
     println(helpString)
 
@@ -161,8 +162,8 @@ object ClusterMessagingApp {
   def addNode(count: Int, port: String,  executionContext: ExecutionContextExecutor) = {
     for(x <- 1 to count ) {
       // Override the configuration of the port
-      val config = ConfigFactory.parseString("akka.remote.netty.tcp.port=" + port)
-        .withFallback(ConfigFactory.parseString("akka.cluster.roles= [node]"))
+      val config = ConfigFactory.parseString("akka.remote.netty.tcp.port = " + port)
+        .withFallback(ConfigFactory.parseString("akka.cluster.roles = [node]"))
         .withFallback(defaultConfig)
 
       // Create an Akka system
@@ -193,6 +194,7 @@ object ClusterMessagingApp {
   def shutdown() = {
     for { n <- workerSystems } yield n.shutdown()
     system.shutdown()
+    System.exit(1)
   }
 }
 

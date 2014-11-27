@@ -24,7 +24,7 @@ class NodeWorkerActor extends Actor with ActorLogging {
 
   var schedule =
     system.scheduler.schedule(Duration.Zero,
-                              interval= Duration(30, TimeUnit.MILLISECONDS)) {
+                              interval= Duration(50, TimeUnit.MILLISECONDS)) {
       sendCommonMessage()
     }
 
