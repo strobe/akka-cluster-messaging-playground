@@ -169,7 +169,7 @@ object ClusterMessagingApp {
 
     val seq =
       for {
-      // getting stats futures
+        // getting stats futures
         f <- (0 until 100 by 5) map( s => {
           // set timeout
           router ! (if (s > 0) SetSendTimeout(s) else SetSendTimeout(1))
@@ -195,7 +195,7 @@ object ClusterMessagingApp {
 
     // restore original state
     router ! SetSendTimeout(initTimeout)
-    removeNode(nodesAdded)
+    removeNode(nodesAdded, silent = true)
 
 
     case class StatItem(nodes: Int, clusterMessages: Int, nodeMessages: Int, timeout: Int)
@@ -231,7 +231,7 @@ object ClusterMessagingApp {
 
 
   // TODO: it should wait for cluster MemberRemoved message before say that is removed
-  def removeNode(count: Int) = {
+  def removeNode(count: Int, silent: Boolean = false) = {
     if (count < workerSystems.length - 1) {
       for (x <- 1 to count) {
         // removing last node
@@ -239,10 +239,12 @@ object ClusterMessagingApp {
         workerSystems = workerSystems filterNot candidate.==
         candidate.shutdown()
 
-        println("node removed")
+        if (!silent) println("node removed")
       }
     }
-    else { println("cluster doesn't has enough nodes for this command") }
+    else if (!silent) {
+      println("cluster doesn't has enough nodes for this command")
+    }
   }
 
 
@@ -302,7 +304,7 @@ object ClusterMessagingApp {
   def shutdown() = {
     for { n <- workerSystems } yield n.shutdown()
     system.shutdown()
-    System.exit(1)
+    System.exit(0)
   }
 }
 
