@@ -276,8 +276,8 @@ object ClusterMessagingApp {
 
       // Create an Akka system
       val system = ActorSystem("ClusterSystem",
-                               config= Some(config)/*,
-                               defaultExecutionContext= Some(executionContext)*/) // we use shared dispatcher here
+                               config= Some(config),
+                               defaultExecutionContext= Some(executionContext)) // we use shared dispatcher here
 
       // node worker actor
       val worker = system.actorOf(Props[NodeWorkerActor], name= "worker")
