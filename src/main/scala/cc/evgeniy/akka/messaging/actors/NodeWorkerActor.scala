@@ -1,7 +1,7 @@
 package cc.evgeniy.akka.messaging.actors
 
 import java.util.concurrent.TimeUnit
-import akka.actor.{ Actor, ActorLogging, Props}
+import akka.actor.{ActorRef, Actor, ActorLogging, Props}
 import akka.routing.FromConfig
 import scala.collection.mutable
 import scala.concurrent.ExecutionContextExecutor
@@ -22,19 +22,25 @@ class NodeWorkerActor extends Actor with ActorLogging {
   val router = context.actorOf(FromConfig.props(Props.empty)
     .withDispatcher("my-fork-join-dispatcher"), name= "nodesRouter")
 
-  var schedule =
-    system.scheduler.schedule(Duration.Zero,
-                              interval= Duration(50, TimeUnit.MILLISECONDS)) {
-      sendCommonMessage()
-    }
+  var timeout = 100
 
   var countQueue = mutable.Queue[Long]()
 
+  var schedule =
+    system.scheduler.schedule(Duration.Zero,
+                              interval= Duration(timeout, TimeUnit.MILLISECONDS)) {
+      sendCommonMessage()
+
+    }
 
   def receive = {
     case SetSendTimeout(ms: Int) => {
       changeSendTimeout(ms)
       log.info(s"timeout changed $ms")
+    }
+
+    case GetStats(nodes: Int, master: ActorRef) => {
+      master ! CurrentStats(nodes, countOfProcessedMessages(), timeout)
     }
 
     case CommonMessage => doMessagesLogStats()
@@ -44,6 +50,7 @@ class NodeWorkerActor extends Actor with ActorLogging {
 
   def changeSendTimeout(ms: Int) = {
     schedule.cancel()
+    timeout  = ms
     schedule =
       system.scheduler.schedule(Duration.Zero,
                                 interval= Duration(ms, TimeUnit.MILLISECONDS)) {
@@ -56,20 +63,27 @@ class NodeWorkerActor extends Actor with ActorLogging {
     router ! CommonMessage
   }
 
-  def doMessagesLogStats() = {
+
+  def countOfProcessedMessages(): Int = {
     val now = System.currentTimeMillis()
     val lastSec = now - 1000
 
     // removing all elements which is lived more that second
     countQueue.dequeueAll(_ <= lastSec)
 
+    // count of messages for last second
+    val count: Int = countQueue.length
+    count
+  }
+
+
+  def doMessagesLogStats() = {
+    val now = System.currentTimeMillis()
+
     // add current timestamp
     countQueue += now
 
-    // count of messages for last second
-    val count = countQueue.length
-
     log.info(s"${SystemAddressExtension(context.system).address.toString} " +
-      s" $count Messages processed in 1 second")
+      s" ${countOfProcessedMessages()} Messages processed in 1 second")
   }
 }
